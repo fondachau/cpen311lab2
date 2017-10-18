@@ -1,0 +1,145 @@
+`default_nettype none
+module Basic_Organ_Solution(
+	input logic CLK_50M,
+output logic [15:0] audiodata,
+input logic [31:0] flash_mem_readdata,
+input logic flash_mem_readdatavalid,
+input logic reset,
+output logic [2:0] state,
+output logic [22:0] currentaddress,
+output logic [22:0] nextaddress,
+output logic playvalue,
+output logic playvalueoff,
+output logic play,
+input newclock
+	);
+
+logic flash_mem_read;
+
+
+
+assign flash_mem_read=state[0];
+
+
+
+logic resetcounter;
+logic [31:0] d;
+//logic [31:0] desiredfreq;
+
+//logic [22:0] currentaddress;
+//logic [22:0] nextaddress;
+
+// determin frequency later
+//counter counter1(.clk(CLK_50M), .reset(resetcounter), .Q(d));
+//clockdiv clockdiv1(.d(d),.desiredfreq(32'd25000000),.clk(CLK_50M),.reset(resetcounter),.newclock(newclock));
+adder adder1(.clk(newclock),.d(currentaddress),.q(nextaddress));
+flipflop addressff (.clk(newclock),.d(nextaddress),.q(currentaddress));
+flipflop #(1)playvalue1 (.clk(newclock),.d(play),.q(playvalue));
+assign play = playvalueoff ? 1'b0:1'b1;
+//
+
+//read audio data
+
+//finite state machine
+
+parameter [2:0] start = 3'b000;
+parameter [2:0] read = 3'b001;
+parameter [2:0] waitread = 3'b010;
+parameter [2:0] play1 = 3'b100;
+parameter [2:0] play2 = 3'b110;
+
+
+always_ff @ (posedge CLK_50M, posedge reset)
+	begin
+	if (reset) state<=start;
+	else 
+		begin
+		case(state)
+		start: begin
+			state<=read;
+			playvalueoff<=1'b0;
+			end
+		read:begin
+			state<=waitread;
+			end
+		waitread:begin
+			if ( flash_mem_readdatavalid==1'b1) state<= play1;
+			end
+		play1:if(playvalue) begin
+			audiodata<= flash_mem_readdata [15:0];
+			state<=play2;
+			playvalueoff<=1'b1;
+			end
+
+		play2:
+			if(playvalue) begin
+			audiodata<= flash_mem_readdata [31:16];
+			playvalueoff<=1'b1;
+			state<=start;
+			end
+		default: state<=start;
+		
+		endcase
+end//end else 
+		end//end alwaysff
+		
+		endmodule 
+		
+		
+		
+//new clock of frequency of input 
+module clockdiv (input logic [31:0] d,input logic [31:0] desiredfreq,input logic clk, output logic reset, output logic newclock);
+
+always_ff @ (posedge (clk))
+begin
+	if (d==((32'd25000000/(desiredfreq))-32'd1))
+		begin
+		newclock<=1'b1;
+		end
+	else if (d>=((32'd50000000/(desiredfreq))-32'b1))
+		begin
+		newclock<=1'b0;
+		reset<=1'b1;
+		end
+	else
+		begin
+		newclock<= newclock;
+		reset<=1'b0;
+		end
+end
+endmodule
+
+
+
+//counter: increase the value to Q every clock cycle
+module counter(input logic clk, input logic reset, output logic [31:0] Q);
+always_ff @ (posedge (clk))
+begin 
+	if (reset)
+		begin
+		Q=32'b1;
+		end
+	else
+		Q=Q+32'b1;
+end
+endmodule
+
+module nextaddressread (input logic clk, input logic direction, input logic [22:0] currentaddress, output logic[22:0] nextaddress);
+always_ff @(posedge clk)
+begin
+	if (direction)
+		nextaddress=currentaddress+23'b1;
+	else
+		nextaddress=currentaddress-23'b0;
+		end
+endmodule
+
+module flipflop #(parameter width = 23)(input logic clk, input logic [width-1:0] d, output logic [width-1:0] q);
+always_ff @(posedge clk)
+q<=d;
+endmodule
+
+module adder(input logic clk,input logic [22:0]d,output logic [22:0]q);
+always_ff @(posedge clk)
+q=d+23'b1;
+endmodule 
