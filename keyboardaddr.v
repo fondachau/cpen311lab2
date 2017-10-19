@@ -17,7 +17,7 @@ module keyboardaddr (currentaddr, state, nextstate, D, E, B, F, R,nextaddr);
 			idleFW:	//making it so you can only change FW/BW 
 					if(E) begin
 						nextstate<=FW;
-						nextaddr<=currentaddr+6'b100000;
+						nextaddr<=currentaddr+1'b1;
 						end
 					else begin
 						nextstate<=idleFW;
@@ -25,7 +25,7 @@ module keyboardaddr (currentaddr, state, nextstate, D, E, B, F, R,nextaddr);
 			idleBW:
 					if(E) begin
 						nextstate<=BW;
-						nextaddr<=currentaddr+6'b100000;
+						nextaddr<=currentaddr+1'b1;
 						end
 					else begin
 						nextstate<=idleBW;
@@ -38,7 +38,7 @@ module keyboardaddr (currentaddr, state, nextstate, D, E, B, F, R,nextaddr);
 						end
 					else begin
 						nextstate<=FW;
-						nextaddr<=currentaddr+6'b100000;						
+						nextaddr<=currentaddr+1'b1;						
 						end
 			BW:
 					if(D) begin
@@ -47,7 +47,7 @@ module keyboardaddr (currentaddr, state, nextstate, D, E, B, F, R,nextaddr);
 						end
 					else begin
 						nextstate<=BW;
-						nextaddr<=currentaddr+6'b100000;
+						nextaddr<=currentaddr+1'b1;
 						end
 		endcase
 	end
