@@ -1,6 +1,6 @@
 `default_nettype none
-module Basic_Organ_Solution(
-	input logic CLK_50M,
+module statemachine(
+input logic CLK_50M,
 output logic [15:0] audiodata,
 input logic [31:0] flash_mem_readdata,
 input logic flash_mem_readdatavalid,
@@ -8,10 +8,11 @@ input logic reset,
 output logic [2:0] state,
 output logic [22:0] currentaddress,
 output logic [22:0] nextaddress,
-output logic playvalue,
-output logic playvalueoff,
-output logic play,
-input newclock
+output logic newclock1,
+output logic [31:0] d1,
+output logic resetcounter1
+
+//input newclock
 	);
 
 logic flash_mem_read;
@@ -22,25 +23,23 @@ assign flash_mem_read=state[0];
 
 
 
-logic resetcounter;
-logic [31:0] d;
-//logic [31:0] desiredfreq;
-
-//logic [22:0] currentaddress;
-//logic [22:0] nextaddress;
+logic [31:0] desiredfreq;
 
 // determin frequency later
-//counter counter1(.clk(CLK_50M), .reset(resetcounter), .Q(d));
-//clockdiv clockdiv1(.d(d),.desiredfreq(32'd25000000),.clk(CLK_50M),.reset(resetcounter),.newclock(newclock));
-adder adder1(.clk(newclock),.d(currentaddress),.q(nextaddress));
-flipflop addressff (.clk(newclock),.d(nextaddress),.q(currentaddress));
-flipflop #(1)playvalue1 (.clk(newclock),.d(play),.q(playvalue));
-assign play = playvalueoff ? 1'b0:1'b1;
-//
+
+//clock divider, change value for speed
+counter counter1 (CLK_50M, resetcounter1,d1);
+clockdiv div1 (d1,32'd3125000,CLK_50M,resetcounter1, newclock1);
+
+//address going forward
+adder adder1(.clk(newclock1),.d(currentaddress),.q(nextaddress));
+flipflop addressff (.clk(newclock1),.d(nextaddress),.q(currentaddress));
 
 //read audio data
 
 //finite state machine
+// when playing in forward states go from start-> read-> waitread-> play 1-> play 2
+// when playing in backwards states go from start-> read-> waitread-> play 2-> play 1
 
 parameter [2:0] start = 3'b000;
 parameter [2:0] read = 3'b001;
@@ -57,25 +56,36 @@ always_ff @ (posedge CLK_50M, posedge reset)
 		case(state)
 		start: begin
 			state<=read;
-			playvalueoff<=1'b0;
+	
 			end
 		read:begin
 			state<=waitread;
 			end
 		waitread:begin
 			if ( flash_mem_readdatavalid==1'b1) state<= play1;
+
 			end
-		play1:if(playvalue) begin
+		play1:begin 
+		if(newclock1) begin
+
 			audiodata<= flash_mem_readdata [15:0];
 			state<=play2;
-			playvalueoff<=1'b1;
 			end
+			else
+			audiodata<= flash_mem_readdata [15:0];
 
+		end
 		play2:
-			if(playvalue) begin
-			audiodata<= flash_mem_readdata [31:16];
-			playvalueoff<=1'b1;
+			begin 
+			if(!newclock1) begin
+	
 			state<=start;
+			audiodata<= flash_mem_readdata [31:16];
+			end
+		else 
+
+			audiodata<= flash_mem_readdata [31:16];
+	
 			end
 		default: state<=start;
 		
@@ -86,7 +96,6 @@ end//end else
 		endmodule 
 		
 		
-		
 //new clock of frequency of input 
 module clockdiv (input logic [31:0] d,input logic [31:0] desiredfreq,input logic clk, output logic reset, output logic newclock);
 
@@ -95,6 +104,7 @@ begin
 	if (d==((32'd25000000/(desiredfreq))-32'd1))
 		begin
 		newclock<=1'b1;
+		reset<=1'b0;
 		end
 	else if (d>=((32'd50000000/(desiredfreq))-32'b1))
 		begin
@@ -123,7 +133,6 @@ begin
 		Q=Q+32'b1;
 end
 endmodule
-
 module nextaddressread (input logic clk, input logic direction, input logic [22:0] currentaddress, output logic[22:0] nextaddress);
 always_ff @(posedge clk)
 begin
