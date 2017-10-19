@@ -53,7 +53,11 @@ module simple_ipod_solution(
     
     //////// GPIO //////////
     GPIO_0,
-    GPIO_1
+    GPIO_1,
+	 
+	 reset
+	 
+	 
     
 );
 `define zero_pad(width,signal)  {{((width)-$size(signal)){1'b0}},(signal)}
@@ -63,7 +67,7 @@ module simple_ipod_solution(
 
 //////////// CLOCK //////////
 input                       CLOCK_50;
-
+input reset;
 //////////// LED //////////
 output           [9:0]      LEDR;
 
@@ -223,19 +227,23 @@ wire Sample_Clk_Signal;
 // Insert your code for Lab2 here!
 //
 //
-logic resetcounter;
-logic [31:0] d;
-logic [31:0] desiredfreq;
-logic newclock;
+logic resetcounter1;
+logic [31:0] d1;
+//logic [31:0] desiredfreq;
+logic newclock1;
 logic [22:0] currentaddress;
 logic [22:0] nextaddress;
 logic [15:0] audiodata;
-// determin frequency later
-counter counter1(.clk(CLK_50M), .reset(resetcounter), .Q(d));
-clockdiv clockdiv1(.d(d),.desiredfreq(32'd22000),.clk(CLK_50M),.reset(resetcounter),.newclock(newclock));
 
-//new clock = flash_mem_read??? 
-//
+// determin frequency later
+//clock divider, change value for speed
+counter counter1 (CLK_50M, resetcounter1,d1);
+clockdiv div1 (d1,32'd1,CLK_50M,resetcounter1, newclock1);
+
+//address going forward
+adder adder1(.clk(newclock1),.d(currentaddress),.q(nextaddress));
+flipflop addressff (.clk(newclock1),.d(nextaddress),.q(currentaddress));
+
 
 //read audio data
 wire            flash_mem_read;
@@ -244,6 +252,72 @@ wire    [22:0]  flash_mem_address;
 wire    [31:0]  flash_mem_readdata;
 wire            flash_mem_readdatavalid;
 wire    [3:0]   flash_mem_byteenable;
+
+assign flash_mem_address=currentaddress;
+
+
+//finite state machine
+
+logic [2:0] state;
+//finite state machine
+//1 wait for signal to play-determine by new clock
+//start read- read=1
+//wait for reply-move on if recieve is 1
+//play first send audio move with new clock
+//play second send audio move with new clock
+//finish wait for clock
+
+
+parameter [2:0] start = 3'b000;
+parameter [2:0] read = 3'b010;
+parameter [2:0] waitread = 3'b110;
+parameter [2:0] play1 = 3'b101;
+parameter [2:0] play2 = 3'b111;
+
+
+always_ff @ (posedge CLK_50M, posedge reset)
+	begin
+	if (reset) state<=start;
+	else 
+		begin
+		case(state)
+		start: begin
+			state<=read;
+	
+			end
+		read:begin
+			state<=waitread;
+			end
+		waitread:begin
+			if ( flash_mem_readdatavalid==1'b1) state<= play1;
+
+			end
+		play1:begin 
+		if(newclock1) begin
+			audiodata<= flash_mem_readdata [15:0];
+			state<=play2;
+			end
+			else
+			audiodata<= flash_mem_readdata [15:0];
+			LED[7:0]=8'b11111111;
+		end
+		play2:
+			begin 
+			if(!newclock1) begin
+			state<=start;
+			audiodata<= flash_mem_readdata [31:16];
+			end
+		else 
+			audiodata<= flash_mem_readdata [31:16];
+			LED[7:0]=8'b00000000;
+			end
+		default: state<=start;
+		
+		endcase
+end//end else 
+		end//end alwaysff
+
+assign flash_mem_read=~state[0];
 
 
 flash flash_inst (
@@ -257,10 +331,9 @@ flash flash_inst (
     .flash_mem_writedata     (),
     .flash_mem_readdata      (flash_mem_readdata),// 32'b output audio data is in here
     .flash_mem_readdatavalid (flash_mem_readdatavalid), //1'b output
-    .flash_mem_byteenable    (flash_mem_byteenable) //4'b input, net very important to us? for writing?
+    .flash_mem_byteenable    (4'b0000) //4'b input, net very important to us? for writing?
 );
-            
-				
+            			
 //need to slit the output of  flash_mem_readdata into two parts for audiodata				
 				
 				
@@ -271,7 +344,8 @@ assign Sample_Clk_Signal = audiodata;
 
 //Audio Generation Signal
 //Note that the audio needs signed data - so convert 1 bit to 8 bits signed
-wire [7:0] audio_data = {~Sample_Clk_Signal,4'b000,{3{Sample_Clk_Signal}}}; //generate signed sample audio signal
+wire [7:0] audio_data = {audiodata};
+//~Sample_Clk_Signal,4'b000,{3{Sample_Clk_Signal}}}; //generate signed sample audio signal
 
 
 
@@ -420,10 +494,11 @@ LCD_Scope_Encapsulated_pacoblaze_wrapper LCD_LED_scope(
                       .InG(8'hBB),
                       .InF(8'h01),
                        .InE(8'h23),
-                      .InD(8'h45),
-                      .InC(8'h67),
-                      .InB(8'h89),
-                     .InA(8'h00),
+                      .InD(currentaddress[15:8]),
+                      .InC(currentaddress[7:0]),
+                      .InB(audiodata[15:8]),
+                      .InA(audiodata[7:0]),
+							
                           
                      //LCD display information signals
                          .InfoH({scope_info15,scope_info14}),
@@ -433,7 +508,7 @@ LCD_Scope_Encapsulated_pacoblaze_wrapper LCD_LED_scope(
                           .InfoD({scope_info7,scope_info6}),
                           .InfoC({scope_info5,scope_info4}),
                           .InfoB({scope_info3,scope_info2}),
-                          .InfoA({scope_info1,scope_info0}),
+                              .InfoA(audiodata),
                           
                   //choose to display the values or the oscilloscope
                           .choose_scope_or_LCD(choose_LCD_or_SCOPE),
@@ -689,6 +764,7 @@ begin
 	if (d==((32'd25000000/(desiredfreq))-32'd1))
 		begin
 		newclock<=1'b1;
+		reset<=1'b0;
 		end
 	else if (d>=((32'd50000000/(desiredfreq))-32'b1))
 		begin
@@ -717,7 +793,6 @@ begin
 		Q=Q+32'b1;
 end
 endmodule
-
 module nextaddressread (input logic clk, input logic direction, input logic [22:0] currentaddress, output logic[22:0] nextaddress);
 always_ff @(posedge clk)
 begin
@@ -725,9 +800,15 @@ begin
 		nextaddress=currentaddress+23'b1;
 	else
 		nextaddress=currentaddress-23'b0;
+		end
 endmodule
 
-module flipflop (input logic clk, input logic [22:0] d, output logic [22:0] q)
+module flipflop #(parameter width = 23)(input logic clk, input logic [width-1:0] d, output logic [width-1:0] q);
 always_ff @(posedge clk)
 q<=d;
 endmodule
+
+module adder(input logic clk,input logic [22:0]d,output logic [22:0]q);
+always_ff @(posedge clk)
+q=d+23'b1;
+endmodule 
