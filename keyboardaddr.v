@@ -1,7 +1,9 @@
 module keyboardaddr (currentaddr, state, nextstate, D, E, B, F, R,nextaddr);
 	input logic [31:0]  currentaddr;
 	input logic D, E, B, F, R;
+	input logic [1:0] state;
 	output logic [31:0] nextaddr;
+	output logic [1:0] nextstate;
 	
 	parameter idleFW = 2'b00;
 	parameter idleBW = 2'b01;
@@ -11,7 +13,7 @@ module keyboardaddr (currentaddr, state, nextstate, D, E, B, F, R,nextaddr);
 	always_ff @ (currentaddr) //going to check which buttons are pressed after mem is accessed and played note?
 		begin
 			case(state)
-			
+			default: nextstate<= FW;
 			idleFW:	//making it so you can only change FW/BW 
 					if(E) begin
 						nextstate<=FW;
@@ -47,5 +49,6 @@ module keyboardaddr (currentaddr, state, nextstate, D, E, B, F, R,nextaddr);
 						nextstate<=BW;
 						nextaddr<=currentaddr+6'b100000;
 						end
-		end
+		endcase
+	end
 endmodule
