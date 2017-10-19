@@ -92,10 +92,9 @@ parameter character_exclaim=8'h21;          //'!'
 	
 	//ANDing the keyboard input with the ASCII representation of the characters
 	//Then using unary reduction to see if input == specified character
-	//and update at every keyboard press
-		assign D = &(character_D & kbd)| &(character_lowercase_d & kbd);
-		assign E = &(character_E & kbd)| &(character_lowercase_e & kbd);
-		assign B = &(character_B & kbd)| &(character_lowercase_b & kbd);
-		assign F = &(character_F & kbd)| &(character_lowercase_f & kbd);
-		assign R = &(character_R & kbd)| &(character_lowercase_r & kbd);
+		assign D = (character_D == kbd)| (character_lowercase_d == kbd);
+		assign E = (character_E == kbd)| (character_lowercase_e == kbd);
+		assign B = (character_B == kbd)| (character_lowercase_b == kbd);
+		assign F = (character_F == kbd)| (character_lowercase_f == kbd);
+		assign R = (character_R == kbd)| (character_lowercase_r == kbd);
 endmodule
