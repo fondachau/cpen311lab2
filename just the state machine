@@ -1,51 +1,23 @@
-`default_nettype none
-module statemachine(
+
+module flash_fsm(
 input logic CLK_50M,
 output logic [15:0] audiodata,
 input logic [31:0] flash_mem_readdata,
 input logic flash_mem_readdatavalid,
 input logic reset,
 output logic [2:0] state,
-output logic [22:0] currentaddress,
-output logic [22:0] nextaddress,
-output logic newclock1,
-output logic [31:0] d1,
-output logic resetcounter1
-
-//input newclock
-	);
-
-logic flash_mem_read;
-
-
-
-assign flash_mem_read=state[0];
-
-
-
-logic [31:0] desiredfreq;
-
-// determin frequency later
-
-//clock divider, change value for speed
-counter counter1 (CLK_50M, resetcounter1,d1);
-clockdiv div1 (d1,32'd3125000,CLK_50M,resetcounter1, newclock1);
-
-//address going forward
-adder adder1(.clk(newclock1),.d(currentaddress),.q(nextaddress));
-flipflop addressff (.clk(newclock1),.d(nextaddress),.q(currentaddress));
-
-//read audio data
-
-//finite state machine
-// when playing in forward states go from start-> read-> waitread-> play 1-> play 2
-// when playing in backwards states go from start-> read-> waitread-> play 2-> play 1
-
+//output logic [22:0] currentaddress,
+//output logic [22:0] nextaddress,
+input logic newclock1,
+output flash_mem_read
+//output logic [31:0] d1,
+//input logic resetcounter1
+);
 parameter [2:0] start = 3'b000;
-parameter [2:0] read = 3'b001;
-parameter [2:0] waitread = 3'b010;
-parameter [2:0] play1 = 3'b100;
-parameter [2:0] play2 = 3'b110;
+parameter [2:0] read = 3'b010;
+parameter [2:0] waitread = 3'b110;
+parameter [2:0] play1 = 3'b101;
+parameter [2:0] play2 = 3'b111;
 
 
 always_ff @ (posedge CLK_50M, posedge reset)
@@ -67,88 +39,32 @@ always_ff @ (posedge CLK_50M, posedge reset)
 			end
 		play1:begin 
 		if(newclock1) begin
-
 			audiodata<= flash_mem_readdata [15:0];
 			state<=play2;
 			end
 			else
+			begin
 			audiodata<= flash_mem_readdata [15:0];
-
+			//LED[7:0]=8'b11111111;
+			end
 		end
 		play2:
 			begin 
 			if(!newclock1) begin
-	
 			state<=start;
 			audiodata<= flash_mem_readdata [31:16];
 			end
 		else 
-
+		begin
 			audiodata<= flash_mem_readdata [31:16];
-	
+			//LED[7:0]=8'b00000000;
+			end
 			end
 		default: state<=start;
 		
 		endcase
 end//end else 
 		end//end alwaysff
-		
-		endmodule 
-		
-		
-//new clock of frequency of input 
-module clockdiv (input logic [31:0] d,input logic [31:0] desiredfreq,input logic clk, output logic reset, output logic newclock);
 
-always_ff @ (posedge (clk))
-begin
-	if (d==((32'd25000000/(desiredfreq))-32'd1))
-		begin
-		newclock<=1'b1;
-		reset<=1'b0;
-		end
-	else if (d>=((32'd50000000/(desiredfreq))-32'b1))
-		begin
-		newclock<=1'b0;
-		reset<=1'b1;
-		end
-	else
-		begin
-		newclock<= newclock;
-		reset<=1'b0;
-		end
-end
-endmodule
-
-
-
-//counter: increase the value to Q every clock cycle
-module counter(input logic clk, input logic reset, output logic [31:0] Q);
-always_ff @ (posedge (clk))
-begin 
-	if (reset)
-		begin
-		Q=32'b1;
-		end
-	else
-		Q=Q+32'b1;
-end
-endmodule
-module nextaddressread (input logic clk, input logic direction, input logic [22:0] currentaddress, output logic[22:0] nextaddress);
-always_ff @(posedge clk)
-begin
-	if (direction)
-		nextaddress=currentaddress+23'b1;
-	else
-		nextaddress=currentaddress-23'b0;
-		end
-endmodule
-
-module flipflop #(parameter width = 23)(input logic clk, input logic [width-1:0] d, output logic [width-1:0] q);
-always_ff @(posedge clk)
-q<=d;
-endmodule
-
-module adder(input logic clk,input logic [22:0]d,output logic [22:0]q);
-always_ff @(posedge clk)
-q=d+23'b1;
+assign flash_mem_read=~state[0];
 endmodule 
