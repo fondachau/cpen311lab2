@@ -1,23 +1,40 @@
 
+/*
+.CLK_50M(CLK_50M),//input
+.audiodata(audiodata),//output
+.flash_mem_readdata(flash_mem_readdata),//input
+.flash_mem_readdatavalid(flash_mem_readdatavalid),//input
+.reset(reset),//input
+.state(state),//output
+//output logic [22:0] currentaddress,
+//output logic [22:0] nextaddress,
+.newclock1(newclock1),//input
+.flash_mem_byteenable(flash_mem_byteenable),
+.flash_mem_read(flash_mem_read)//output logic [31:0] d1,
+//input logic resetcounter1
+*/
+
+
 module flash_fsm(
 input logic CLK_50M,
 output logic [15:0] audiodata,
 input logic [31:0] flash_mem_readdata,
 input logic flash_mem_readdatavalid,
 input logic reset,
-output logic [2:0] state,
+output logic [6:0] state,
 //output logic [22:0] currentaddress,
 //output logic [22:0] nextaddress,
 input logic newclock1,
-output flash_mem_read
+output flash_mem_read,
+output flash_mem_byteenable
 //output logic [31:0] d1,
 //input logic resetcounter1
 );
-parameter [2:0] start = 3'b000;
-parameter [2:0] read = 3'b010;
-parameter [2:0] waitread = 3'b110;
-parameter [2:0] play1 = 3'b101;
-parameter [2:0] play2 = 3'b111;
+parameter [6:0] start = 7'b000_0000;
+parameter [6:0] read = 7'b010_0000;
+parameter [6:0] waitread = 7'b110_1111;
+parameter [6:0] play1 = 7'b101_1111;
+parameter [6:0] play2 = 7'b111_1111;
 
 
 always_ff @ (posedge CLK_50M, posedge reset)
@@ -66,5 +83,8 @@ always_ff @ (posedge CLK_50M, posedge reset)
 end//end else 
 		end//end alwaysff
 
-assign flash_mem_read=~state[0];
+assign flash_mem_read=~state[4];
+assign flash_mem_byteenable={~state[3],~state[2],~state[1],~state[0]};
+
+
 endmodule 
