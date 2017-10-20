@@ -1,3 +1,5 @@
+
+
 module keyboardaddr (currentaddr,clk, state, D, E, B, F, R,nextaddr);
 	input logic [31:0]  currentaddr;
 	input logic D, E, B, F, R;
@@ -18,11 +20,7 @@ module keyboardaddr (currentaddr,clk, state, D, E, B, F, R,nextaddr);
 	//R = reset
 	vDFF addrVDFF(clk,nextaddr,currentaddr);
 	always_ff @ (posedge clk)
-		begin
-			if(currentaddr==32'b11111111111111111111111111111111) begin
-				currentaddr<=32'b0;
-				end
-			else begin
+	begin
 					case(state)
 					default: state<= idleFW;
 					idleFW:	//making it so you can only change FW/BW 
@@ -60,9 +58,14 @@ module keyboardaddr (currentaddr,clk, state, D, E, B, F, R,nextaddr);
 								nextaddr<=currentaddr;
 								end
 
-					FW:			if(R) begin		//reset
+					FW:			
+					
+							if(currentaddr==32'h7ffff) begin
+						nextaddr<=32'b0;
+							end
+							else if(R) begin		//reset
 									state<=FW;
-									nextaddr<=1'b0;
+									nextaddr<=32'b0;
 								end
 								else if(B) begin		//backward
 									state<=BW;
@@ -77,9 +80,12 @@ module keyboardaddr (currentaddr,clk, state, D, E, B, F, R,nextaddr);
 									nextaddr<=currentaddr+1'b1;						
 								end
 					BW:
-							if(R) begin//reset
+			if(currentaddr==32'b0) begin
+				nextaddr<=32'h7ffff;
+				end
+							else if(R) begin//reset
 								state<=BW;
-								nextaddr<=1'b0;
+								nextaddr<=32'h7ffff;
 								end
 							else if(F) begin		//forward
 								state<=FW;
@@ -95,7 +101,7 @@ module keyboardaddr (currentaddr,clk, state, D, E, B, F, R,nextaddr);
 								end
 				endcase
 			end
-	end
+
 endmodule
 
 module vDFF(clk, in, out);
@@ -106,4 +112,4 @@ module vDFF(clk, in, out);
 
 	always_ff @(posedge clk)
 		out<=in;
-endmodule
+endmodule 
