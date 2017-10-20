@@ -224,7 +224,10 @@ wire Sample_Clk_Signal;
 //
 //
 
-
+logic D,B,E,F,R;
+logic [1:0]state2;
+logic idle;
+	
 logic [15:0] audiodata;
 logic reset;
 //logic [7:0]led;
@@ -238,13 +241,11 @@ logic [31:0] d1;
 logic resetcounter1;
 logic direction;
 
-
-adder adder1(.clk(newclock1),.d(currentaddress),.q(nextaddress));
-flipflop addressff (.clk(newclock1),.d(nextaddress),.q(currentaddress));
-
 counter counter1 (CLK_50M, resetcounter1,d1);
 clockdiv div1 (d1,32'd22000,CLK_50M,resetcounter1, newclock1);
-
+keyboardaddr addressset (.currentaddr(currentaddress),.clk(newclock1), .idle(idle),.state(state2),.D(D), .E(E), .B(B), .F(F), .R(R),.nextaddr(nextaddress));
+keyboardint keyboardinput (.kbd(kbd_received_ascii_code), .D(D), .E(E), .B(B), .F(F), .R(R));
+vDFF addrVDFF(newclock1,nextaddress,currentaddress);
 
 fsm flash(
 .CLK_50M(CLK_50M),//input
@@ -256,6 +257,7 @@ fsm flash(
 .reset(reset),//input
 .state(state),//output
 .out(out),
+.idle(idle),
 //output logic [22:0] currentaddress,
 //output logic [22:0] nextaddress,
 .newclock1(newclock1),//input
@@ -445,7 +447,7 @@ LCD_Scope_Encapsulated_pacoblaze_wrapper LCD_LED_scope(
                       .InD(flash_mem_readdata[15:8]),
                       .InC(flash_mem_readdata[7:0]),
                       .InB(8'h89),
-                     .InA(8'h00),
+                     .InA({3'b0,idle,4'b0}),
                           
                      //LCD display information signals
                          .InfoH({scope_info15,scope_info14}),
@@ -716,6 +718,7 @@ output logic [6:0] state,
 //output logic [22:0] nextaddress,
 input logic newclock1,
 output flash_mem_read,
+input logic idle,
 output logic [15:0] out,
 output flash_mem_byteenable
 //output logic [31:0] d1,
@@ -734,10 +737,13 @@ always_ff @ (posedge CLK_50M, posedge reset)
 	else 
 		begin
 		case(state)
-		start: begin
+		start: if(idle)begin
 			state<=read;
 	
 			end
+			else
+			state<=start;
+	
 		read:begin
 			state<=waitread;
 			end
@@ -856,3 +862,225 @@ module adder(input logic clk,input logic [22:0]d,output logic [22:0]q);
 always_ff @(posedge clk)
 q=d+23'b1;
 endmodule 
+
+
+module mux2 #(parameter width = 32)(input logic sel, input logic [width-1:0] a,input logic [width-1:0] b,output logic [width-1:0] c);
+assign c=sel?a:b;
+endmodule
+
+module keyboardaddr (input logic [31:0]  currentaddr,
+	input logic D, E, B, F, R,
+	output logic [1:0] state,
+	input logic clk,
+output logic idle,
+
+	output logic [31:0] nextaddr
+	);
+	parameter idleFW = 2'b00;
+	parameter idleBW = 2'b01;
+	parameter FW = 2'b10;
+	parameter BW = 2'b11;
+	
+	//D = idle
+	//E = play
+	//B = backward
+	//F = forward
+	//R = reset
+	//assign idle=state[1];
+	
+	always_ff @ (posedge clk)
+	begin
+					case(state)
+					idleFW:	//making it so you can only change FW/BW 
+							if(R) begin		//reset
+								state<=idleFW;
+								nextaddr<=1'b0;
+								end
+							else if(B) begin //backward
+								state<=idleBW;
+								nextaddr<=currentaddr;	
+								end
+							else if(E) begin	//start
+								state<=FW;
+								nextaddr<=currentaddr+1'b1;
+								end
+							else begin		//keep idle
+								state<=idleFW;
+								nextaddr<=currentaddr;
+								end
+					idleBW:
+							if(R) begin		//reset
+								state<=idleBW;
+								nextaddr<=1'b0;
+								end
+							else if(F) begin		//forward
+								state<=idleFW;
+								nextaddr<=currentaddr;	
+								end
+							else if(B) begin		//start backward
+								state<=BW;
+								nextaddr<=currentaddr+1'b1;
+								end
+							else begin		//keep idle
+								state<=idleBW;
+								nextaddr<=currentaddr;
+								end
+
+					FW:			
+					
+							if(currentaddr==32'h7ffff) begin
+						nextaddr<=32'b0;
+							end
+							else if(R) begin		//reset
+									state<=FW;
+									nextaddr<=32'b0;
+								end
+								else if(B) begin		//backward
+									state<=BW;
+									nextaddr<=currentaddr-1'b1;	
+								end
+								else if(D) begin		//idle
+									state<=idleFW;
+									nextaddr<=currentaddr;
+								end
+								else begin		//keep forward
+									state<=FW;
+									nextaddr<=currentaddr+1'b1;						
+								end
+					BW:
+			if(currentaddr==32'b0) begin
+				nextaddr<=32'h7ffff;
+				end
+							else if(R) begin//reset
+								state<=BW;
+								nextaddr<=32'h7ffff;
+								end
+							else if(F) begin		//forward
+								state<=FW;
+								nextaddr<=currentaddr+1'b1;	
+								end
+							else if(D) begin		//idle
+								state<=idleBW;
+								nextaddr<=currentaddr;
+								end
+							else begin		//keep backward
+								state<=BW;
+								nextaddr<=currentaddr-1'b1;
+								end
+						default: state<= idleFW;
+
+				endcase
+			end
+
+endmodule
+
+module vDFF(clk, in, out);
+	input logic clk;
+	input logic [31:0] in;
+
+	output logic [31:0] out;
+
+	always_ff @(posedge clk)
+		out<=in;
+endmodule 
+
+module keyboardint(kbd, D,E,B,F,R);
+	input logic [7:0] kbd;
+ 
+	output D,E,B,F,R;
+	
+	//Character definitions
+
+//numbers
+parameter character_0 =8'h30;
+parameter character_1 =8'h31;
+parameter character_2 =8'h32;
+parameter character_3 =8'h33;
+parameter character_4 =8'h34;
+parameter character_5 =8'h35;
+parameter character_6 =8'h36;
+parameter character_7 =8'h37;
+parameter character_8 =8'h38;
+parameter character_9 =8'h39;
+
+
+//Uppercase Letters
+parameter character_A =8'h41;
+parameter character_B =8'h42;
+parameter character_C =8'h43;
+parameter character_D =8'h44;
+parameter character_E =8'h45;
+parameter character_F =8'h46;
+parameter character_G =8'h47;
+parameter character_H =8'h48;
+parameter character_I =8'h49;
+parameter character_J =8'h4A;
+parameter character_K =8'h4B;
+parameter character_L =8'h4C;
+parameter character_M =8'h4D;
+parameter character_N =8'h4E;
+parameter character_O =8'h4F;
+parameter character_P =8'h50;
+parameter character_Q =8'h51;
+parameter character_R =8'h52;
+parameter character_S =8'h53;
+parameter character_T =8'h54;
+parameter character_U =8'h55;
+parameter character_V =8'h56;
+parameter character_W =8'h57;
+parameter character_X =8'h58;
+parameter character_Y =8'h59;
+parameter character_Z =8'h5A;
+
+//Lowercase Letters
+parameter character_lowercase_a= 8'h61;
+parameter character_lowercase_b= 8'h62;
+parameter character_lowercase_c= 8'h63;
+parameter character_lowercase_d= 8'h64;
+parameter character_lowercase_e= 8'h65;
+parameter character_lowercase_f= 8'h66;
+parameter character_lowercase_g= 8'h67;
+parameter character_lowercase_h= 8'h68;
+parameter character_lowercase_i= 8'h69;
+parameter character_lowercase_j= 8'h6A;
+parameter character_lowercase_k= 8'h6B;
+parameter character_lowercase_l= 8'h6C;
+parameter character_lowercase_m= 8'h6D;
+parameter character_lowercase_n= 8'h6E;
+parameter character_lowercase_o= 8'h6F;
+parameter character_lowercase_p= 8'h70;
+parameter character_lowercase_q= 8'h71;
+parameter character_lowercase_r= 8'h72;
+parameter character_lowercase_s= 8'h73;
+parameter character_lowercase_t= 8'h74;
+parameter character_lowercase_u= 8'h75;
+parameter character_lowercase_v= 8'h76;
+parameter character_lowercase_w= 8'h77;
+parameter character_lowercase_x= 8'h78;
+parameter character_lowercase_y= 8'h79;
+parameter character_lowercase_z= 8'h7A;
+
+//Other Characters
+parameter character_colon = 8'h3A;          //':'
+parameter character_stop = 8'h2E;           //'.'
+parameter character_semi_colon = 8'h3B;   //';'
+parameter character_minus = 8'h2D;         //'-'
+parameter character_divide = 8'h2F;         //'/'
+parameter character_plus = 8'h2B;          //'+'
+parameter character_comma = 8'h2C;          // ','
+parameter character_less_than = 8'h3C;    //'<'
+parameter character_greater_than = 8'h3E; //'>'
+parameter character_equals = 8'h3D;         //'='
+parameter character_question = 8'h3F;      //'?'
+parameter character_dollar = 8'h24;         //'$'
+parameter character_space=8'h20;           //' '     
+parameter character_exclaim=8'h21;          //'!'
+	
+	//ANDing the keyboard input with the ASCII representation of the characters
+	//Then using unary reduction to see if input == specified character
+		assign D = (character_D == kbd)| (character_lowercase_d == kbd);
+		assign E = (character_E == kbd)| (character_lowercase_e == kbd);
+		assign B = (character_B == kbd)| (character_lowercase_b == kbd);
+		assign F = (character_F == kbd)| (character_lowercase_f == kbd);
+		assign R = (character_R == kbd)| (character_lowercase_r == kbd);
+endmodule
