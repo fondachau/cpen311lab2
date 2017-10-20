@@ -887,7 +887,7 @@ output logic idle,
 	//F = forward
 	//R = reset
 	//assign idle=state[1];
-	
+assign idle=state[1];	
 	always_ff @ (posedge clk)
 	begin
 					case(state)
