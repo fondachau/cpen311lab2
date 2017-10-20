@@ -241,11 +241,26 @@ logic [31:0] d1;
 logic resetcounter1;
 logic direction;
 
+//speed control unable to get working
+logic [31:0] prevaddvalue;
+logic [31:0] addvalue;
+keyintegration speedcontrol(.clk(Clock_1Hz),.addvalue(addvalue),.prevaddvalue(prevaddvalue),.keys({speed_reset_event,speed_up_event,speed_down_event}));
+flipflop #(32)addvalueff (.clk(CLK_50M), .d(addvalue), .q(prevaddvalue));
+clockdiv div1 (d1,(32'd22000+addvalue),CLK_50M,resetcounter1, newclock1);
+
 counter counter1 (CLK_50M, resetcounter1,d1);
-clockdiv div1 (d1,32'd22000,CLK_50M,resetcounter1, newclock1);
+//clockdiv div1 (.d(d1),.desiredfreq(32'd22000),.clk(CLK_50M),.resetcounter1(resetcounter1), .newclock(newclock1));
 keyboardaddr addressset (.currentaddr(currentaddress),.clk(newclock1), .idle(idle),.state(state2),.D(D), .E(E), .B(B), .F(F), .R(R),.nextaddr(nextaddress));
 keyboardint keyboardinput (.kbd(kbd_received_ascii_code), .D(D), .E(E), .B(B), .F(F), .R(R));
 vDFF addrVDFF(newclock1,nextaddress,currentaddress);
+logic edgeclock1;
+doublesync 
+newclock_doublsync
+(.indata(newclock1),
+.outdata(edgeclock1),
+.clk(CLK_50M),
+.reset(1'b1));
+
 
 fsm flash(
 .CLK_50M(CLK_50M),//input
@@ -260,7 +275,7 @@ fsm flash(
 .idle(idle),
 //output logic [22:0] currentaddress,
 //output logic [22:0] nextaddress,
-.newclock1(newclock1),//input
+.newclock1(edgeclock1),//input
 .flash_mem_byteenable(flash_mem_byteenable),
 .flash_mem_read(flash_mem_read)//output logic [31:0] d1,
 //input logic resetcounter1
@@ -755,7 +770,7 @@ always_ff @ (posedge CLK_50M, posedge reset)
 			begin 
 			if (direction)
 				begin
-				if(!newclock1) 
+				if(newclock1) 
 					begin
 					state<=start;
 					audiodata<= flash_mem_readdata [31:16];
@@ -765,7 +780,7 @@ always_ff @ (posedge CLK_50M, posedge reset)
 				end
 			else
 				begin 
-				if(!newclock1) 
+				if(newclock1) 
 					begin
 					audiodata<= flash_mem_readdata [15:0];
 					state<=play2;
@@ -1083,4 +1098,32 @@ parameter character_exclaim=8'h21;          //'!'
 		assign B = (character_B == kbd)| (character_lowercase_b == kbd);
 		assign F = (character_F == kbd)| (character_lowercase_f == kbd);
 		assign R = (character_R == kbd)| (character_lowercase_r == kbd);
+endmodule
+
+
+module keyintegration(clk,addvalue,prevaddvalue,keys);
+	input logic clk;
+	//input logic [31:0] freq;
+	input logic [2:0] keys;
+	output logic [31:0] addvalue;
+	
+	//logic [31:0] variable;
+	input logic [31:0] prevaddvalue;
+	always_ff @(posedge clk)begin
+			if(keys[2]) begin
+				addvalue<=0;
+			end
+			else if(keys[1]) begin
+				addvalue<=prevaddvalue+32'd1000;
+			end
+			else if(keys[0]) begin
+				addvalue<=prevaddvalue-32'd1000;
+			end
+			else begin
+				addvalue<=prevaddvalue;
+				
+			end
+		end
+		
+//assign newfreq = 32'd22000  + variable;
 endmodule
